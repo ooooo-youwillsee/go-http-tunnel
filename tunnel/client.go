@@ -8,27 +8,35 @@ import (
 )
 
 type Client struct {
-	addr       string
-	l          net.Listener
+	localAddr  string
 	remoteAddr string
-	remoteConn net.Conn
+	tunnelAddr string
+	tcpProxies *TCPProxies
 }
 
-func NewClient(addr, remoteAddr string) *Client {
-	return &Client{
-		addr:       addr,
+func NewClient(localAddr, remoteAddr, tunnelAddr string, options ...ClientOption) *Client {
+	c := &Client{
+		localAddr:  localAddr,
 		remoteAddr: remoteAddr,
+		tunnelAddr: tunnelAddr,
 	}
+	if localAddr == "" || remoteAddr == "" || tunnelAddr == "" {
+		panic("localAddr or remoteAddr or tunnelAddr is empty")
+	}
+	for _, option := range options {
+		option(c)
+	}
+	return c
 }
 
 func (c *Client) ListenAndServe() error {
-	l, err := net.Listen("tcp", c.addr)
+	l, err := net.Listen("tcp", c.localAddr)
 	if err != nil {
-		log.Fatalln("listen addr err", err)
+		log.Fatalln("listen localAddr err", err)
 		return err
 	}
-	c.l = l
-	log.Printf("listen addr %s\n", c.addr)
+	defer l.Close()
+	log.Printf("listen localAddr %s\n", c.localAddr)
 
 	for {
 		conn, err := l.Accept()
@@ -42,31 +50,40 @@ func (c *Client) ListenAndServe() error {
 
 func (c *Client) handleConn(conn net.Conn) {
 	defer conn.Close()
-	remoteConn, err := net.Dial("tcp", c.remoteAddr)
+	// dial tunnel
+	tunnelConn, err := net.Dial("tcp", c.tunnelAddr)
 	if err != nil {
-		log.Errorf("dial addr %s err %v\n", c.remoteAddr, err)
+		log.Errorf("dial localAddr %s err %v\n", c.tunnelAddr, err)
 		return
 	}
-	c.remoteConn = remoteConn
-
-	// send request
-	request, _ := http.NewRequest(http.MethodConnect, URL_CONNECT, nil)
-	err = request.Write(c.remoteConn)
-	if err != nil {
-		log.Error("send connect request err", err)
-		return
-	}
-	// receive response
-	response, err := http.ReadResponse(bufio.NewReader(c.remoteConn), request)
-	if err != nil {
-		log.Error("receive connect response err", err)
-		return
-	}
-	if response.StatusCode != http.StatusOK {
-		log.Error("connect http tunnel err")
+	// connect
+	success := c.Connect(tunnelConn, c.remoteAddr)
+	if !success {
 		return
 	}
 	// copy data
-	errCh := CopyConn(conn, remoteConn)
+	errCh := CopyConn(conn, tunnelConn)
 	<-errCh
+}
+
+func (c *Client) Connect(tunnelConn net.Conn, remoteAddr string) bool {
+	// send request
+	request, _ := http.NewRequest(http.MethodConnect, URL_CONNECT, nil)
+	request.Header.Set(HEADER_REMOTE_ADDR, remoteAddr)
+	err := request.Write(tunnelConn)
+	if err != nil {
+		log.Error("send connect request err", err)
+		return false
+	}
+	// receive response
+	response, err := http.ReadResponse(bufio.NewReader(tunnelConn), request)
+	if err != nil {
+		log.Error("receive connect response err", err)
+		return false
+	}
+	if response.StatusCode != http.StatusOK {
+		log.Error("connect http tunnel err")
+		return false
+	}
+	return true
 }
