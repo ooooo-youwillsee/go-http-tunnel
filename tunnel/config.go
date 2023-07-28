@@ -1,79 +1,81 @@
 package tunnel
 
 import (
+	"fmt"
 	"github.com/spf13/viper"
 	"strings"
 )
 
-type TCPProxies []*TCPProxy
+type ClientConfigs []*ClientConfig
 
-type TCPProxy struct {
+type ClientConfig struct {
 	LocalAddr  string
 	RemoteAddr string
 	TunnelAddr string
+	TunnelUrl  string
 }
 
-func NewTcpProxiesFromFile(configPath string) *TCPProxies {
-	viper.SetConfigFile(configPath)
+func NewClientConfigsFromFile(configFile string) *ClientConfigs {
+	viper.SetConfigFile(configFile)
 	if err := viper.ReadInConfig(); err != nil {
-		panic("read config err for path " + configPath)
+		panic("read config err for path " + configFile)
 	}
 
-	tcpProxies := &TCPProxies{}
-	var localAddr string
-	var remoteAddr string
-	var tunnelAddr string
+	ccs := &ClientConfigs{}
+	// parse common
+	tunnelAddr := viper.GetString("common.tunnel_addr")
+	tunnelUrl := viper.GetString("common.tunnel_url")
 
-	for _, m := range viper.AllSettings() {
-		for k, v := range m.(map[string]interface{}) {
-			switch k {
-			case "local_addr":
-				localAddr = v.(string)
-			case "remote_addr":
-				remoteAddr = v.(string)
-			case "tunnel_addr":
-				tunnelAddr = v.(string)
-			}
+	// parse special
+	for g, m := range viper.AllSettings() {
+		if g == "common" {
+			continue
 		}
-		tcpProxies.AddTCPProxy(localAddr, remoteAddr, tunnelAddr)
+		cc := &ClientConfig{}
+		cc.LocalAddr = getString(m, "local_addr", "")
+		cc.RemoteAddr = getString(m, "remote_addr", "")
+		cc.TunnelAddr = getString(m, "tunnel_addr", tunnelAddr)
+		cc.TunnelUrl = getString(m, "tunnel_url", tunnelUrl)
+		*ccs = append(*ccs, cc)
 	}
-	return tcpProxies
+	return ccs
 }
 
-func (ms *TCPProxies) AddTCPProxy(localAddr, remoteAddr, tunnelAddr string) {
-	m := &TCPProxy{
-		LocalAddr:  localAddr,
-		RemoteAddr: remoteAddr,
-		TunnelAddr: tunnelAddr,
-	}
-	*ms = append(*ms, m)
+type ServerConfigs []*ServerConfig
+
+type ServerConfig struct {
+	Addr string
+	Url  string
 }
 
-func (ms *TCPProxies) GetTCPProxy(localAddr string) *TCPProxy {
-	for _, m := range *ms {
-		_, port1 := splitAddr(m.LocalAddr)
-		_, port2 := splitAddr(localAddr)
-		if port1 == port2 {
-			return m
-		}
+func NewServerConfigsFrom(configFile string) *ServerConfigs {
+	viper.SetConfigFile(configFile)
+	if err := viper.ReadInConfig(); err != nil {
+		panic("read config err for path " + configFile)
 	}
-	return nil
-}
 
-func (ms *TCPProxies) GetTunnelAddrs() []string {
-	tunnelAddrs := make([]string, 0)
-	m := make(map[string]struct{})
-	for _, proxy := range *ms {
-		tunnelAddr := proxy.TunnelAddr
-		if _, ok := m[tunnelAddr]; !ok {
-			m[tunnelAddr] = struct{}{}
-			tunnelAddrs = append(tunnelAddrs, tunnelAddr)
+	scs := &ServerConfigs{}
+	for g, m := range viper.AllSettings() {
+		sc := &ServerConfig{}
+		sc.Addr = getString(m, "tunnel_addr", "")
+		sc.Url = getString(m, "tunnel_url", "")
+		if sc.Addr == "" {
+			panic(fmt.Sprintf("group %s config 'Addr' is empty", g))
 		}
+		*scs = append(*scs, sc)
 	}
-	return tunnelAddrs
+	return scs
 }
 
 func splitAddr(addr string) (string, string) {
 	split := strings.Split(addr, ":")
 	return split[0], split[1]
+}
+
+func getString(m interface{}, key string, defaultValue string) string {
+	mm := m.(map[string]interface{})
+	if v, ok := mm[key]; ok {
+		return v.(string)
+	}
+	return defaultValue
 }

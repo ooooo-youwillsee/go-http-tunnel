@@ -11,20 +11,22 @@ var (
 )
 
 func init() {
-	flag.StringVar(&config, "c", "", "-c config.ini")
+	flag.StringVar(&config, "c", "", "-c client.ini")
 	flag.Parse()
 }
 
 func main() {
-	tcpProxies := tunnel.NewTcpProxiesFromFile(config)
-	for _, tcpProxy := range *tcpProxies {
-		go StartClient(tcpProxy.LocalAddr, tcpProxy.RemoteAddr, tcpProxy.TunnelAddr)
+	//log.SetFormatter(&log.JSONFormatter{})
+	//log.SetReportCaller(true)
+	ccs := tunnel.NewClientConfigsFromFile(config)
+	for _, cc := range *ccs {
+		go StartClient(cc.LocalAddr, cc.RemoteAddr, cc.TunnelAddr, cc.TunnelUrl)
 	}
 	<-tunnel.NewQuitSignal()
 }
 
-func StartClient(localAddr, proxyAddr, tunnelAddr string) {
-	server := tunnel.NewClient(localAddr, proxyAddr, tunnelAddr)
+func StartClient(localAddr, proxyAddr, tunnelAddr, tunnelUrl string) {
+	server := tunnel.NewClient(localAddr, proxyAddr, tunnelAddr, tunnelUrl)
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Error(err)

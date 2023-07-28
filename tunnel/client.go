@@ -11,21 +11,26 @@ type Client struct {
 	localAddr  string
 	remoteAddr string
 	tunnelAddr string
-	tcpProxies *TCPProxies
+	tunnelUrl  string
 }
 
-func NewClient(localAddr, remoteAddr, tunnelAddr string, options ...ClientOption) *Client {
+func NewClient(localAddr, remoteAddr, tunnelAddr, tunnelUrl string, options ...ClientOption) *Client {
+	if localAddr == "" || remoteAddr == "" || tunnelAddr == "" {
+		panic("localAddr or remoteAddr or tunnelAddr is empty")
+	}
+	if tunnelUrl == "" {
+		tunnelUrl = URL_CONNECT
+	}
 	c := &Client{
 		localAddr:  localAddr,
 		remoteAddr: remoteAddr,
 		tunnelAddr: tunnelAddr,
-	}
-	if localAddr == "" || remoteAddr == "" || tunnelAddr == "" {
-		panic("localAddr or remoteAddr or tunnelAddr is empty")
+		tunnelUrl:  tunnelUrl,
 	}
 	for _, option := range options {
 		option(c)
 	}
+	log.Infof("NewClient localAddr[%s], remoteAddr[%s], tunnelAddr[%s], tunnelUrl[%s]", localAddr, remoteAddr, tunnelAddr, tunnelUrl)
 	return c
 }
 
@@ -36,7 +41,7 @@ func (c *Client) ListenAndServe() error {
 		return err
 	}
 	defer l.Close()
-	log.Printf("listen localAddr %s\n", c.localAddr)
+	log.Infof("listen localAddr %s", c.localAddr)
 
 	for {
 		conn, err := l.Accept()
@@ -44,21 +49,16 @@ func (c *Client) ListenAndServe() error {
 			log.Error("accept err", err)
 			continue
 		}
-		go c.handleConn(conn)
+		cc := newClientConn(conn)
+		go c.handleConn(cc)
 	}
 }
 
-func (c *Client) handleConn(conn net.Conn) {
+func (c *Client) handleConn(conn *clientConn) {
 	defer conn.Close()
-	// dial tunnel
-	tunnelConn, err := net.Dial("tcp", c.tunnelAddr)
-	if err != nil {
-		log.Errorf("dial localAddr %s err %v\n", c.tunnelAddr, err)
-		return
-	}
 	// connect
-	success := c.Connect(tunnelConn, c.remoteAddr)
-	if !success {
+	tunnelConn := c.Connect()
+	if tunnelConn == nil {
 		return
 	}
 	// copy data
@@ -66,24 +66,45 @@ func (c *Client) handleConn(conn net.Conn) {
 	<-errCh
 }
 
-func (c *Client) Connect(tunnelConn net.Conn, remoteAddr string) bool {
+func (c *Client) Connect() net.Conn {
+	// dial tunnel
+	tunnelConn, err := net.Dial("tcp", c.tunnelAddr)
+	if err != nil {
+		log.Errorf("dial localAddr %s err %v\n", c.tunnelAddr, err)
+		return nil
+	}
 	// send request
-	request, _ := http.NewRequest(http.MethodConnect, URL_CONNECT, nil)
-	request.Header.Set(HEADER_REMOTE_ADDR, remoteAddr)
-	err := request.Write(tunnelConn)
+	host, _ := splitAddr(c.tunnelAddr)
+	request, _ := http.NewRequest(http.MethodGet, c.tunnelUrl, nil)
+	request.Host = host
+	request.Header.Set(HEADER_REMOTE_ADDR, c.remoteAddr)
+	request.Header.Set("HOST", request.Host)
+	err = request.Write(tunnelConn)
 	if err != nil {
 		log.Error("send connect request err", err)
-		return false
+		return nil
 	}
 	// receive response
 	response, err := http.ReadResponse(bufio.NewReader(tunnelConn), request)
 	if err != nil {
 		log.Error("receive connect response err", err)
-		return false
+		return nil
 	}
 	if response.StatusCode != http.StatusOK {
 		log.Error("connect http tunnel err")
-		return false
+		return nil
 	}
-	return true
+	return tunnelConn
+}
+
+type clientConn struct {
+	net.Conn
+}
+
+func newClientConn(conn net.Conn) *clientConn {
+	setTCPConnOptions(conn)
+	cc := &clientConn{
+		Conn: conn,
+	}
+	return cc
 }

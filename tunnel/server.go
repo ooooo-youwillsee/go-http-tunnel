@@ -17,18 +17,24 @@ var (
 )
 
 type Server struct {
-	addr  string
-	l     net.Listener
-	tcpms *TCPProxies
+	addr string
+	url  string
+	l    net.Listener
 }
 
-func NewServer(addr string, options ...ServerOption) *Server {
+func NewServer(addr string, url string, options ...ServerOption) *Server {
+	if url == "" {
+		url = URL_CONNECT
+	}
 	s := &Server{
 		addr: addr,
+		url:  url,
 	}
 	for _, option := range options {
 		option(s)
 	}
+
+	log.Infof("NewServer addr[%s], url[%s]", addr, url)
 	return s
 }
 
@@ -39,10 +45,10 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 	s.l = l
-	log.Printf("listen localAddr %s\n", s.addr)
+	log.Infof("listen localAddr %s", s.addr)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(URL_CONNECT, s.Connect)
+	mux.HandleFunc(s.url, s.Connect)
 	err = http.Serve(s.l, mux)
 	if err != nil {
 		log.Error("serveHTTP err", err)
@@ -69,6 +75,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "not support hijacker")
 		return
 	}
+	log.Infoln("http hijacker success")
 
 	conn, _, _ := hijacker.Hijack()
 	c := s.newServerConn(conn)
@@ -77,7 +84,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) auth(w http.ResponseWriter, r *http.Request) (string, error) {
-	if r.Method != http.MethodConnect {
+	if r.Method != http.MethodGet {
 		log.Errorf("auth method '%s' is not supported", r.Method)
 		return "", ErrAuthFail
 	}
@@ -110,6 +117,7 @@ type ServerConn struct {
 }
 
 func (s *Server) newServerConn(conn net.Conn) *ServerConn {
+	setTCPConnOptions(conn)
 	c := &ServerConn{
 		Conn: conn,
 	}

@@ -9,10 +9,10 @@ var (
 )
 
 func main() {
-	server := tunnel.NewServer(tunnelAddr)
+	server := tunnel.NewServer(tunnelAddr, "")
 	go server.ListenAndServe()
 
-	client := tunnel.NewClient(localAddr, remoteAddr, tunnelAddr)
+	client := tunnel.NewClient(localAddr, remoteAddr, tunnelAddr, "")
 	go client.ListenAndServe()
 
 	<-tunnel.NewQuitSignal()
