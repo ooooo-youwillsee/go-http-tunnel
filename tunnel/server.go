@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"errors"
+	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
@@ -57,6 +58,12 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
+	upgrade := r.Header.Get("Upgrade")
+	if upgrade == "websocket" {
+		s.ConnectWithWebsocket(w, r)
+		return
+	}
+
 	// auth client
 	remoteAddr, err := s.auth(w, r)
 	if err != nil {
@@ -83,6 +90,69 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	go s.handleConn(c)
 }
 
+func (s *Server) ConnectWithWebsocket(w http.ResponseWriter, r *http.Request) {
+	// upgrade http to websocket
+	upgrade := websocket.Upgrader{}
+	wsc, err := upgrade.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	defer wsc.Close()
+	// auth client
+	remoteAddr, err := s.auth(w, r)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	remoteConn, err := net.Dial("tcp", remoteAddr)
+	if err != nil {
+		log.Error("dial remoteAddr err", err)
+		return
+	}
+	defer remoteConn.Close()
+
+	go func() {
+		for {
+			_, bytes, err := wsc.ReadMessage()
+			if err != nil {
+				log.Error(err)
+				break
+			}
+			_, _ = remoteConn.Write(bytes)
+
+			//_, r, err := wsc.NextReader()
+			//if err != nil {
+			//	log.Error(err)
+			//	break
+			//}
+			//io.Copy(remoteConn, r)
+		}
+	}()
+
+	for {
+		buf := make([]byte, 1024)
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			log.Error(err)
+			break
+		}
+		_ = wsc.WriteMessage(websocket.BinaryMessage, buf[:n])
+
+		//w, err := wsc.NextWriter(websocket.BinaryMessage)
+		//if err != nil {
+		//	log.Error(err)
+		//	break
+		//}
+		//io.Copy(w, remoteConn)
+		//w.Close()
+	}
+	//c := s.newServerConn(conn)
+	//c.remoteAddr = remoteAddr
+	//go s.handleConn(c)
+}
+
 func (s *Server) auth(w http.ResponseWriter, r *http.Request) (string, error) {
 	if r.Method != http.MethodGet {
 		log.Errorf("auth method '%s' is not supported", r.Method)
@@ -100,26 +170,20 @@ func (s *Server) auth(w http.ResponseWriter, r *http.Request) (string, error) {
 
 func (s *Server) handleConn(conn *ServerConn) {
 	defer conn.Close()
-	remoteConn, err := net.Dial("tcp", conn.remoteAddr)
-	if err != nil {
-		log.Error("dial remoteAddr err", err)
-		return
-	}
-	defer remoteConn.Close()
+
 	// copy data
-	errCh := CopyConn(conn, remoteConn)
-	<-errCh
+	//errCh := Copy(conn, remoteConn)
+	//<-errCh
 }
 
 type ServerConn struct {
-	net.Conn
+	io.ReadWriteCloser
 	remoteAddr string
 }
 
-func (s *Server) newServerConn(conn net.Conn) *ServerConn {
-	setTCPConnOptions(conn)
+func (s *Server) newServerConn(conn io.ReadWriteCloser) *ServerConn {
 	c := &ServerConn{
-		Conn: conn,
+		ReadWriteCloser: conn,
 	}
 	return c
 }

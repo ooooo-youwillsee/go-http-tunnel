@@ -1,12 +1,10 @@
 package tunnel
 
 import (
-	log "github.com/sirupsen/logrus"
 	"io"
-	"net"
 )
 
-func CopyConn(localConn net.Conn, remoteConn net.Conn) chan error {
+func Copy(localConn io.ReadWriteCloser, remoteConn io.ReadWriteCloser) chan error {
 	errCh := make(chan error, 1)
 	go copy(localConn, remoteConn, errCh)
 	go copy(remoteConn, localConn, errCh)
@@ -15,8 +13,5 @@ func CopyConn(localConn net.Conn, remoteConn net.Conn) chan error {
 
 func copy(src io.Reader, dst io.Writer, errCh chan error) {
 	_, err := io.Copy(dst, src)
-	if err != nil {
-		log.Infoln("copy err", err)
-		errCh <- err
-	}
+	errCh <- err
 }
