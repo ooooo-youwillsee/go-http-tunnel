@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
+	"github.com/ooooo-youwillsee/go-http-tunnel/tunnel"
 	log "github.com/sirupsen/logrus"
-	"go-http-tunnel/tunnel"
 )
 
 var (

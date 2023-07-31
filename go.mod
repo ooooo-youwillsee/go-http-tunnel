@@ -1,4 +1,4 @@
-module go-http-tunnel
+module github.com/ooooo-youwillsee/go-http-tunnel
 
 go 1.20
 

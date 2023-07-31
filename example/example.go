@@ -1,6 +1,6 @@
 package main
 
-import "go-http-tunnel/tunnel"
+import "github.com/ooooo-youwillsee/go-http-tunnel/tunnel"
 
 var (
 	localAddr  = ":8080"
