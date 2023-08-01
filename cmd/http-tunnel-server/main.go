@@ -20,13 +20,13 @@ func main() {
 	//log.SetReportCaller(true)
 	scs := tunnel.NewServerConfigsFrom(config)
 	for _, sc := range *scs {
-		go startServer(sc.Addr, sc.Url)
+		go startServer(sc)
 	}
 	<-tunnel.NewQuitSignal()
 }
 
-func startServer(addr string, url string) {
-	server := tunnel.NewServer(addr, url)
+func startServer(sc *tunnel.ServerConfig) {
+	server := tunnel.NewServer(sc.Addr, sc.Url, tunnel.ServerWithToken(sc.Token))
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Error(err)

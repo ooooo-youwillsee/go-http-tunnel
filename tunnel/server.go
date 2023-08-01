@@ -11,14 +11,16 @@ var (
 	URL_CONNECT = "/"
 
 	HEADER_REMOTE_ADDR = "REMOTE-ADDR"
+	HEADER_TOKEN       = "TOKEN"
 
 	ErrAuthFail = errors.New("auth fail")
 )
 
 type Server struct {
-	addr string
-	url  string
-	l    net.Listener
+	addr  string
+	url   string
+	token string
+	l     net.Listener
 }
 
 func NewServer(addr string, url string, options ...ServerOption) *Server {
@@ -81,6 +83,11 @@ func (s *Server) auth(w http.ResponseWriter, r *http.Request) (string, error) {
 	remoteAddr := r.Header.Get(HEADER_REMOTE_ADDR)
 	if remoteAddr == "" {
 		log.Errorf("http header '%s' not found", HEADER_REMOTE_ADDR)
+		return "", ErrAuthFail
+	}
+	token := r.Header.Get(HEADER_TOKEN)
+	if token != s.token {
+		log.Errorf("http header token '%s' is err", token)
 		return "", ErrAuthFail
 	}
 	return remoteAddr, nil

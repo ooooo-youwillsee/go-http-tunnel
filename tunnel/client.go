@@ -6,18 +6,19 @@ import (
 )
 
 var (
-	CONNECT_HTTP      connectMode = "http"
-	CONNECT_WEBSOCKET connectMode = "websocket"
+	CONNECT_HTTP      ConnectMode = "http"
+	CONNECT_WEBSOCKET ConnectMode = "websocket"
 )
 
-type connectMode string
+type ConnectMode string
 
 type Client struct {
 	localAddr  string
 	remoteAddr string
 	tunnelAddr string
 	tunnelUrl  string
-	mode       connectMode
+	token      string
+	mode       ConnectMode
 }
 
 func NewClient(localAddr, remoteAddr, tunnelAddr, tunnelUrl string, options ...ClientOption) *Client {

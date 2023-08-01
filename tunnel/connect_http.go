@@ -22,13 +22,13 @@ func (c *Client) connectWithHTTP(conn net.Conn) {
 	request.Header.Set("HOST", request.Host)
 	err = request.Write(tunnelConn)
 	if err != nil {
-		log.Error("send connect request err", err)
+		log.Error("send connect request ", err)
 		return
 	}
 	// receive response
 	response, err := http.ReadResponse(bufio.NewReader(tunnelConn), request)
 	if err != nil {
-		log.Error("receive connect response err", err)
+		log.Error("receive connect response ", err)
 		return
 	}
 	if response.StatusCode != http.StatusOK {
@@ -72,7 +72,7 @@ func (s *Server) connectWithHTTP(w http.ResponseWriter, r *http.Request, remoteA
 	// dial remote addr
 	remoteConn, err := net.Dial("tcp", remoteAddr)
 	if err != nil {
-		log.Error("dial remote addr", err)
+		log.Error("dial remote addr ", err)
 		return
 	}
 	defer remoteConn.Close()

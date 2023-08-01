@@ -20,13 +20,13 @@ func main() {
 	//log.SetReportCaller(true)
 	ccs := tunnel.NewClientConfigsFromFile(config)
 	for _, cc := range *ccs {
-		go StartClient(cc.LocalAddr, cc.RemoteAddr, cc.TunnelAddr, cc.TunnelUrl)
+		go StartClient(cc)
 	}
 	<-tunnel.NewQuitSignal()
 }
 
-func StartClient(localAddr, proxyAddr, tunnelAddr, tunnelUrl string) {
-	server := tunnel.NewClient(localAddr, proxyAddr, tunnelAddr, tunnelUrl)
+func StartClient(cc *tunnel.ClientConfig) {
+	server := tunnel.NewClient(cc.LocalAddr, cc.RemoteAddr, cc.TunnelAddr, cc.TunnelUrl, tunnel.ClientWithToken(cc.Token))
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Error(err)

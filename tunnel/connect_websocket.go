@@ -17,9 +17,10 @@ func (c *Client) connectWithWebsocket(conn net.Conn) {
 	}
 	header := http.Header{}
 	header.Set(HEADER_REMOTE_ADDR, c.remoteAddr)
+	header.Set(HEADER_TOKEN, c.token)
 	wsc, _, err := websocket.DefaultDialer.Dial(wsurl.String(), header)
 	if err != nil {
-		log.Error("dial websocket addr", err)
+		log.Error("dial websocket addr ", err)
 		return
 	}
 	defer wsc.Close()
@@ -53,7 +54,7 @@ func (s *Server) connectWithWebsocket(w http.ResponseWriter, r *http.Request, re
 
 	remoteConn, err := net.Dial("tcp", remoteAddr)
 	if err != nil {
-		log.Error("dial remoteAddr", err)
+		log.Error("dial remoteAddr ", err)
 		return
 	}
 	defer remoteConn.Close()
@@ -80,7 +81,7 @@ func copyConnToWebsocket(conn net.Conn, wsc *websocket.Conn) {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Error("conn read", err)
+			log.Error("conn read ", err)
 			return
 		}
 		if n == 0 {
@@ -88,7 +89,7 @@ func copyConnToWebsocket(conn net.Conn, wsc *websocket.Conn) {
 		}
 		err = wsc.WriteMessage(websocket.BinaryMessage, buf[:n])
 		if err != nil {
-			log.Error("websocket write", err)
+			log.Error("websocket write ", err)
 			return
 		}
 	}
@@ -98,7 +99,7 @@ func copyWebsocketToConn(wsc *websocket.Conn, conn net.Conn) {
 	for {
 		messageType, buf, err := wsc.ReadMessage()
 		if err != nil {
-			log.Error("websocket read", err)
+			log.Error("websocket read ", err)
 			return
 		}
 		if messageType != websocket.BinaryMessage {
@@ -106,7 +107,7 @@ func copyWebsocketToConn(wsc *websocket.Conn, conn net.Conn) {
 		}
 		_, err = conn.Write(buf)
 		if err != nil {
-			log.Error("conn write", err)
+			log.Error("conn write ", err)
 			return
 		}
 	}

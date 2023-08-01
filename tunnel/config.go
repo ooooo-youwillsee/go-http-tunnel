@@ -13,6 +13,7 @@ type ClientConfig struct {
 	RemoteAddr string
 	TunnelAddr string
 	TunnelUrl  string
+	Token      string
 }
 
 func NewClientConfigsFromFile(configFile string) *ClientConfigs {
@@ -36,6 +37,7 @@ func NewClientConfigsFromFile(configFile string) *ClientConfigs {
 		cc.RemoteAddr = getString(m, "remote_addr", "")
 		cc.TunnelAddr = getString(m, "tunnel_addr", tunnelAddr)
 		cc.TunnelUrl = getString(m, "tunnel_url", tunnelUrl)
+		cc.Token = getString(m, "token", "")
 		*ccs = append(*ccs, cc)
 	}
 	return ccs
@@ -44,8 +46,9 @@ func NewClientConfigsFromFile(configFile string) *ClientConfigs {
 type ServerConfigs []*ServerConfig
 
 type ServerConfig struct {
-	Addr string
-	Url  string
+	Addr  string
+	Url   string
+	Token string
 }
 
 func NewServerConfigsFrom(configFile string) *ServerConfigs {
@@ -59,6 +62,7 @@ func NewServerConfigsFrom(configFile string) *ServerConfigs {
 		sc := &ServerConfig{}
 		sc.Addr = getString(m, "tunnel_addr", "")
 		sc.Url = getString(m, "tunnel_url", "")
+		sc.Token = getString(m, "token", "")
 		if sc.Addr == "" {
 			panic(fmt.Sprintf("group %s config 'Addr' is empty", g))
 		}
