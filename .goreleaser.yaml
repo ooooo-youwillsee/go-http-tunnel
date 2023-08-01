@@ -37,7 +37,7 @@ archives:
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
-      {{ .Arch }}
+      {{- .Arch }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     # use zip for windows archives
     format_overrides:
