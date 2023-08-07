@@ -3,6 +3,7 @@ package tunnel
 import (
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/xtaci/smux"
 	"net"
 	"net/http"
 )
@@ -12,6 +13,7 @@ var (
 
 	HEADER_REMOTE_ADDR = "REMOTE-ADDR"
 	HEADER_TOKEN       = "TOKEN"
+	HEADER_IS_SMUX     = "IS_SMUX"
 
 	ErrAuthFail = errors.New("auth fail")
 )
@@ -59,36 +61,64 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	// auth client
-	remoteAddr, err := s.auth(w, r)
+	remoteConn, err := s.auth(w, r)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
+	defer remoteConn.Close()
 
+	var conn net.Conn
 	upgrade := r.Header.Get("Upgrade")
 	if upgrade == "websocket" {
-		s.connectWithWebsocket(w, r, remoteAddr)
-		return
+		conn = s.connectWithWebSocket(w, r)
+	} else {
+		conn = s.connectWithHTTP(w, r)
 	}
-	s.connectWithHTTP(w, r, remoteAddr)
+	defer conn.Close()
+
+	// support isSmux
+	isSmux := r.Header.Get(HEADER_IS_SMUX)
+	if isSmux == "true" {
+		session, err := smux.Server(conn, smux.DefaultConfig())
+		if err != nil {
+			log.Error("new isSmux client ", err)
+			return
+		}
+		defer session.Close()
+
+		for {
+			stream, err := session.AcceptStream()
+			if err != nil {
+				log.Error("isSmux open stream ", err)
+				return
+			}
+			go copyDataOnConn(stream, remoteConn)
+		}
+	}
+
+	// per connection
+	copyDataOnConn(conn, remoteConn)
 }
 
-func (s *Server) auth(w http.ResponseWriter, r *http.Request) (string, error) {
-	if r.Method != http.MethodGet {
-		log.Errorf("auth method '%s' is not supported", r.Method)
-		return "", ErrAuthFail
-	}
-
+func (s *Server) auth(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
 	// get remote localAddr
 	remoteAddr := r.Header.Get(HEADER_REMOTE_ADDR)
 	if remoteAddr == "" {
 		log.Errorf("http header '%s' not found", HEADER_REMOTE_ADDR)
-		return "", ErrAuthFail
+		return nil, ErrAuthFail
 	}
+	// verify token
 	token := r.Header.Get(HEADER_TOKEN)
 	if token != s.token {
 		log.Errorf("http header token '%s' is err", token)
-		return "", ErrAuthFail
+		return nil, ErrAuthFail
 	}
-	return remoteAddr, nil
+	// dial remote addr
+	remoteConn, err := net.Dial("tcp", remoteAddr)
+	if err != nil {
+		log.Error("dial remote addr ", err)
+		return nil, err
+	}
+	return remoteConn, nil
 }

@@ -14,6 +14,7 @@ type ClientConfig struct {
 	TunnelAddr string
 	TunnelUrl  string
 	Token      string
+	Smux       string
 }
 
 func NewClientConfigsFromFile(configFile string) *ClientConfigs {
@@ -38,6 +39,7 @@ func NewClientConfigsFromFile(configFile string) *ClientConfigs {
 		cc.TunnelAddr = getString(m, "tunnel_addr", tunnelAddr)
 		cc.TunnelUrl = getString(m, "tunnel_url", tunnelUrl)
 		cc.Token = getString(m, "token", "")
+		cc.Smux = getString(m, "isSmux", "true")
 		*ccs = append(*ccs, cc)
 	}
 	return ccs

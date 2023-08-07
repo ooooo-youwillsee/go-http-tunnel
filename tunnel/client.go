@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	log "github.com/sirupsen/logrus"
+	"github.com/xtaci/smux"
 	"net"
 )
 
@@ -19,6 +20,9 @@ type Client struct {
 	tunnelUrl  string
 	token      string
 	mode       ConnectMode
+	// true or false,  default is true
+	isSmux      string
+	smuxSession *smux.Session
 }
 
 func NewClient(localAddr, remoteAddr, tunnelAddr, tunnelUrl string, options ...ClientOption) *Client {
@@ -64,11 +68,42 @@ func (c *Client) ListenAndServe() error {
 func (c *Client) handleConn(conn net.Conn) {
 	defer conn.Close()
 	setTCPConnOptions(conn)
-	// connect
-	switch c.mode {
-	case CONNECT_HTTP:
-		c.connectWithHTTP(conn)
-	case CONNECT_WEBSOCKET:
-		c.connectWithWebsocket(conn)
+
+	connectFn := func() net.Conn {
+		var tunnelConn net.Conn
+		switch c.mode {
+		case CONNECT_HTTP:
+			tunnelConn = c.connectWithHTTP()
+		case CONNECT_WEBSOCKET:
+			tunnelConn = c.connectWithWebSocket()
+		}
+		return tunnelConn
 	}
+
+	// support isSmux
+	if c.isSmux == "true" {
+		if c.smuxSession == nil || c.smuxSession.IsClosed() {
+			tunnelConn := connectFn()
+			defer tunnelConn.Close()
+			session, err := smux.Client(tunnelConn, smux.DefaultConfig())
+			if err != nil {
+				log.Error("new isSmux client ", err)
+				return
+			}
+			defer session.Close()
+			c.smuxSession = session
+		}
+		stream, err := c.smuxSession.OpenStream()
+		if err != nil {
+			log.Error("mux open stream ", err)
+			return
+		}
+		copyDataOnConn(conn, stream)
+		return
+	}
+
+	// per connection
+	tunnelConn := connectFn()
+	defer tunnelConn.Close()
+	copyDataOnConn(conn, tunnelConn)
 }

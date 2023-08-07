@@ -6,10 +6,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
+	"time"
 )
 
-func (c *Client) connectWithWebsocket(conn net.Conn) {
+func (c *Client) connectWithWebSocket() net.Conn {
 	wsurl := url.URL{
 		Scheme: "ws",
 		Host:   c.tunnelAddr,
@@ -18,97 +18,80 @@ func (c *Client) connectWithWebsocket(conn net.Conn) {
 	header := http.Header{}
 	header.Set(HEADER_REMOTE_ADDR, c.remoteAddr)
 	header.Set(HEADER_TOKEN, c.token)
+	header.Set(HEADER_IS_SMUX, c.isSmux)
 	wsc, _, err := websocket.DefaultDialer.Dial(wsurl.String(), header)
 	if err != nil {
 		log.Error("dial websocket addr ", err)
-		return
+		return nil
 	}
-	defer wsc.Close()
-
-	var wg sync.WaitGroup
-	// read data
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		copyConnToWebsocket(conn, wsc)
-	}()
-
-	// write data
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		copyWebsocketToConn(wsc, conn)
-	}()
-	wg.Wait()
+	conn := newWebSocketConn(wsc)
+	return conn
 }
 
-func (s *Server) connectWithWebsocket(w http.ResponseWriter, r *http.Request, remoteAddr string) {
+func (s *Server) connectWithWebSocket(w http.ResponseWriter, r *http.Request) net.Conn {
 	// upgrade http to websocket
 	upgrader := websocket.Upgrader{}
 	wsc, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error("upgrade http to websocket ", err)
+		return nil
+	}
+	conn := newWebSocketConn(wsc)
+	return conn
+}
+
+type wsConn struct {
+	wsc *websocket.Conn
+	buf []byte
+}
+
+func newWebSocketConn(wsc *websocket.Conn) net.Conn {
+	return &wsConn{
+		wsc: wsc,
+	}
+}
+
+func (w *wsConn) Read(b []byte) (n int, err error) {
+	if len(w.buf) > 0 {
+		n = copy(b, w.buf)
+		w.buf = w.buf[n:]
 		return
 	}
-	defer wsc.Close()
-
-	remoteConn, err := net.Dial("tcp", remoteAddr)
+	_, buf, err := w.wsc.ReadMessage()
 	if err != nil {
-		log.Error("dial remoteAddr ", err)
-		return
+		return 0, err
 	}
-	defer remoteConn.Close()
-
-	var wg sync.WaitGroup
-	// read data
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		copyWebsocketToConn(wsc, remoteConn)
-	}()
-
-	// write data
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		copyConnToWebsocket(remoteConn, wsc)
-	}()
-	wg.Wait()
+	n = copy(b, buf)
+	w.buf = buf[n:]
+	return
 }
 
-func copyConnToWebsocket(conn net.Conn, wsc *websocket.Conn) {
-	buf := make([]byte, 1024*1024)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.Error("conn read ", err)
-			return
-		}
-		if n == 0 {
-			continue
-		}
-		err = wsc.WriteMessage(websocket.BinaryMessage, buf[:n])
-		if err != nil {
-			log.Error("websocket write ", err)
-			return
-		}
-	}
+func (w *wsConn) Write(b []byte) (n int, err error) {
+	err = w.wsc.WriteMessage(websocket.BinaryMessage, b)
+	n = len(b)
+	return
 }
 
-func copyWebsocketToConn(wsc *websocket.Conn, conn net.Conn) {
-	for {
-		messageType, buf, err := wsc.ReadMessage()
-		if err != nil {
-			log.Error("websocket read ", err)
-			return
-		}
-		if messageType != websocket.BinaryMessage {
-			continue
-		}
-		_, err = conn.Write(buf)
-		if err != nil {
-			log.Error("conn write ", err)
-			return
-		}
-	}
+func (w *wsConn) Close() error {
+	return w.wsc.Close()
+}
+
+func (w *wsConn) LocalAddr() net.Addr {
+	return w.wsc.LocalAddr()
+}
+
+func (w *wsConn) RemoteAddr() net.Addr {
+	return w.wsc.RemoteAddr()
+}
+
+func (w *wsConn) SetDeadline(t time.Time) error {
+	return w.wsc.UnderlyingConn().SetDeadline(t)
+}
+
+func (w *wsConn) SetReadDeadline(t time.Time) error {
+	return w.wsc.UnderlyingConn().SetReadDeadline(t)
+}
+
+func (w *wsConn) SetWriteDeadline(t time.Time) error {
+	return w.wsc.SetWriteDeadline(t)
 }

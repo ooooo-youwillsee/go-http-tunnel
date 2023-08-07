@@ -2,16 +2,31 @@ package tunnel
 
 import (
 	"io"
+	"net"
+	"sync"
 )
 
-func Copy(localConn io.ReadWriteCloser, remoteConn io.ReadWriteCloser) chan error {
-	errCh := make(chan error, 1)
-	go copy(localConn, remoteConn, errCh)
-	go copy(remoteConn, localConn, errCh)
-	return errCh
+func copyDataOnConn(conn1 net.Conn, conn2 net.Conn) {
+	var wg sync.WaitGroup
+	// read data
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		copyConn(conn1, conn2)
+	}()
+
+	// write data
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		copyConn(conn2, conn1)
+	}()
+	wg.Wait()
 }
 
-func copy(src io.Reader, dst io.Writer, errCh chan error) {
-	_, err := io.Copy(dst, src)
-	errCh <- err
+func copyConn(conn1 net.Conn, conn2 net.Conn) {
+	_, err := io.Copy(conn2, conn1)
+	if err != nil {
+		return
+	}
 }

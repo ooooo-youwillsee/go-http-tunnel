@@ -26,7 +26,8 @@ func main() {
 }
 
 func StartClient(cc *tunnel.ClientConfig) {
-	server := tunnel.NewClient(cc.LocalAddr, cc.RemoteAddr, cc.TunnelAddr, cc.TunnelUrl, tunnel.ClientWithToken(cc.Token))
+	server := tunnel.NewClient(cc.LocalAddr, cc.RemoteAddr, cc.TunnelAddr, cc.TunnelUrl,
+		tunnel.ClientWithToken(cc.Token), tunnel.ClientWithSMux(cc.Smux))
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Error(err)
