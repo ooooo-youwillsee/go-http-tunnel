@@ -27,9 +27,9 @@ func ClientWithMode(mode ConnectMode) ClientOption {
 	}
 }
 
-func ClientWithSMux(smux string) ClientOption {
+func ClientWithSMux(isSmux string) ClientOption {
 	return func(client *Client) {
-		client.isSmux = smux
+		client.isSmux = isSmux
 	}
 }
 

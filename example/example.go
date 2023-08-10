@@ -17,7 +17,7 @@ func main() {
 	server := tunnel.NewServer(tunnelAddr, "")
 	go server.ListenAndServe()
 
-	client := tunnel.NewClient(localAddr, remoteAddr, tunnelAddr, "", tunnel.ClientWithSMux(true))
+	client := tunnel.NewClient(localAddr, remoteAddr, tunnelAddr, "", tunnel.ClientWithSMux("true"))
 	go client.ListenAndServe()
 
 	go testServer(remoteAddr)
