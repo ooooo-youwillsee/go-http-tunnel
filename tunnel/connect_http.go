@@ -12,7 +12,8 @@ func (c *Client) connectWithHTTP() net.Conn {
 	// dial tunnel
 	tunnelConn, err := net.Dial("tcp", c.tunnelAddr)
 	if err != nil {
-		log.Errorf("dial localAddr %s err %v\n", c.tunnelAddr, err)
+		log.Errorf("dial tunnelAddr %s, err: %v", c.tunnelAddr, err)
+		return nil
 	}
 	// send request
 	request, _ := http.NewRequest(http.MethodConnect, c.tunnelUrl, nil)

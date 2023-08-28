@@ -61,8 +61,8 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	// auth client
-	remoteConn, err := s.auth(w, r)
-	if err != nil {
+	remoteConn := s.auth(w, r)
+	if remoteConn == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -75,6 +75,9 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	} else {
 		conn = s.connectWithHTTP(w, r)
 	}
+	if conn == nil {
+		return
+	}
 	defer conn.Close()
 
 	// support isSmux
@@ -82,7 +85,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	if isSmux == "true" {
 		session, err := smux.Server(conn, smux.DefaultConfig())
 		if err != nil {
-			log.Error("new isSmux client ", err)
+			log.Errorf("new smux server, err: %v", err)
 			return
 		}
 		defer session.Close()
@@ -90,7 +93,7 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 		for {
 			stream, err := session.AcceptStream()
 			if err != nil {
-				log.Error("isSmux open stream ", err)
+				log.Errorf("smux accept stream, err: %v", err)
 				return
 			}
 			go copyDataOnConn(stream, remoteConn)
@@ -101,24 +104,24 @@ func (s *Server) Connect(w http.ResponseWriter, r *http.Request) {
 	copyDataOnConn(conn, remoteConn)
 }
 
-func (s *Server) auth(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
+func (s *Server) auth(w http.ResponseWriter, r *http.Request) net.Conn {
 	// get remote localAddr
 	remoteAddr := r.Header.Get(HEADER_REMOTE_ADDR)
 	if remoteAddr == "" {
 		log.Errorf("http header '%s' not found", HEADER_REMOTE_ADDR)
-		return nil, ErrAuthFail
+		return nil
 	}
 	// verify token
 	token := r.Header.Get(HEADER_TOKEN)
 	if token != s.token {
 		log.Errorf("http header token '%s' is err", token)
-		return nil, ErrAuthFail
+		return nil
 	}
 	// dial remote addr
 	remoteConn, err := net.Dial("tcp", remoteAddr)
 	if err != nil {
-		log.Error("dial remote addr ", err)
-		return nil, err
+		log.Errorf("dial remote addr %s, err: %v", remoteAddr, err)
+		return nil
 	}
-	return remoteConn, nil
+	return remoteConn
 }

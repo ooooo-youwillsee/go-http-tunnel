@@ -49,7 +49,7 @@ func NewClient(localAddr, remoteAddr, tunnelAddr, tunnelUrl string, options ...C
 func (c *Client) ListenAndServe() error {
 	l, err := net.Listen("tcp", c.localAddr)
 	if err != nil {
-		log.Fatalln("listen localAddr err", err)
+		log.Errorf("listen localAddr %s, err: %v", c.localAddr, err)
 		return err
 	}
 	defer l.Close()
@@ -58,7 +58,7 @@ func (c *Client) ListenAndServe() error {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Error("accept err", err)
+			log.Errorf("accept, err: %v", err)
 			continue
 		}
 		go c.handleConn(conn)
@@ -84,10 +84,13 @@ func (c *Client) handleConn(conn net.Conn) {
 	if c.isSmux == "true" {
 		if c.smuxSession == nil || c.smuxSession.IsClosed() {
 			tunnelConn := connectFn()
+			if tunnelConn == nil {
+				return
+			}
 			defer tunnelConn.Close()
 			session, err := smux.Client(tunnelConn, smux.DefaultConfig())
 			if err != nil {
-				log.Error("new isSmux client ", err)
+				log.Errorf("new smux client, err: %v", err)
 				return
 			}
 			defer session.Close()
@@ -95,7 +98,7 @@ func (c *Client) handleConn(conn net.Conn) {
 		}
 		stream, err := c.smuxSession.OpenStream()
 		if err != nil {
-			log.Error("mux open stream ", err)
+			log.Errorf("mux open stream, err: %v", err)
 			return
 		}
 		copyDataOnConn(conn, stream)

@@ -21,7 +21,7 @@ func (c *Client) connectWithWebSocket() net.Conn {
 	header.Set(HEADER_IS_SMUX, c.isSmux)
 	wsc, _, err := websocket.DefaultDialer.Dial(wsurl.String(), header)
 	if err != nil {
-		log.Error("dial websocket addr ", err)
+		log.Errorf("dial websocket addr %s, err: %v", wsurl.String(), err)
 		return nil
 	}
 	conn := newWebSocketConn(wsc)
@@ -33,7 +33,7 @@ func (s *Server) connectWithWebSocket(w http.ResponseWriter, r *http.Request) ne
 	upgrader := websocket.Upgrader{}
 	wsc, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error("upgrade http to websocket ", err)
+		log.Error("upgrade http to websocket, err: %v", err)
 		return nil
 	}
 	conn := newWebSocketConn(wsc)
