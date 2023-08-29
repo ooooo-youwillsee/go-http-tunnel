@@ -1,59 +1,38 @@
 package tunnel
 
 import (
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 	"net"
+	"net/http"
 )
-
-var (
-	CONNECT_HTTP      ConnectMode = "http"
-	CONNECT_WEBSOCKET ConnectMode = "websocket"
-)
-
-type ConnectMode string
 
 type Client struct {
-	localAddr  string
-	remoteAddr string
-	tunnelAddr string
-	tunnelUrl  string
-	token      string
-	mode       ConnectMode
-	// true or false,  default is true
-	isSmux      string
+	config *ClientConfig
+	// it is not nil if IsSmux is true
 	smuxSession *smux.Session
 }
 
-func NewClient(localAddr, remoteAddr, tunnelAddr, tunnelUrl string, options ...ClientOption) *Client {
-	if localAddr == "" || remoteAddr == "" || tunnelAddr == "" {
-		panic("localAddr or remoteAddr or tunnelAddr is empty")
-	}
-	if tunnelUrl == "" {
-		tunnelUrl = URL_CONNECT
-	}
+func NewClient(cc *ClientConfig, options ...ClientOption) *Client {
 	c := &Client{
-		localAddr:  localAddr,
-		remoteAddr: remoteAddr,
-		tunnelAddr: tunnelAddr,
-		tunnelUrl:  tunnelUrl,
-		mode:       CONNECT_WEBSOCKET,
+		config: cc,
 	}
 	for _, option := range options {
 		option(c)
 	}
-	log.Infof("NewClient localAddr[%s], remoteAddr[%s], tunnelAddr[%s], tunnelUrl[%s]", localAddr, remoteAddr, tunnelAddr, tunnelUrl)
+	log.Infof("NewClient config %s", c.config)
 	return c
 }
 
 func (c *Client) ListenAndServe() error {
-	l, err := net.Listen("tcp", c.localAddr)
+	l, err := net.Listen("tcp", c.config.LocalAddr)
 	if err != nil {
-		log.Errorf("listen localAddr %s, err: %v", c.localAddr, err)
+		log.Errorf("listen LocalAddr %s, err: %v", c.config.LocalAddr, err)
 		return err
 	}
 	defer l.Close()
-	log.Infof("listen localAddr %s", c.localAddr)
+	log.Infof("listen LocalAddr %s", c.config.LocalAddr)
 
 	for {
 		conn, err := l.Accept()
@@ -66,22 +45,25 @@ func (c *Client) ListenAndServe() error {
 }
 
 func (c *Client) handleConn(conn net.Conn) {
+	log.Infof("handle conn %s", conn.RemoteAddr())
 	defer conn.Close()
 	setTCPConnOptions(conn)
 
 	connectFn := func() net.Conn {
 		var tunnelConn net.Conn
-		switch c.mode {
+		switch c.config.Mode {
 		case CONNECT_HTTP:
 			tunnelConn = c.connectWithHTTP()
 		case CONNECT_WEBSOCKET:
 			tunnelConn = c.connectWithWebSocket()
+		default:
+			panic("mode is empty")
 		}
 		return tunnelConn
 	}
 
-	// support isSmux
-	if c.isSmux == "true" {
+	// support smux
+	if c.config.IsSmux {
 		if c.smuxSession == nil || c.smuxSession.IsClosed() {
 			tunnelConn := connectFn()
 			if tunnelConn == nil {
@@ -90,7 +72,7 @@ func (c *Client) handleConn(conn net.Conn) {
 			defer tunnelConn.Close()
 			session, err := smux.Client(tunnelConn, smux.DefaultConfig())
 			if err != nil {
-				log.Errorf("new smux client, err: %v", err)
+				log.Errorf("new IsSmux client, err: %v", err)
 				return
 			}
 			defer session.Close()
@@ -101,12 +83,26 @@ func (c *Client) handleConn(conn net.Conn) {
 			log.Errorf("mux open stream, err: %v", err)
 			return
 		}
+		if stream == nil {
+			log.Errorf("mux open stream is null")
+			return
+		}
 		copyDataOnConn(conn, stream)
 		return
 	}
 
 	// per connection
 	tunnelConn := connectFn()
+	if tunnelConn == nil {
+		return
+	}
 	defer tunnelConn.Close()
 	copyDataOnConn(conn, tunnelConn)
+}
+
+func (c *Client) setHeader(header *http.Header) {
+	header.Set(HEADER_MODE, string(c.config.Mode))
+	header.Set(HEADER_REMOTE_ADDR, c.config.RemoteAddr)
+	header.Set(HEADER_IS_SMUX, fmt.Sprint(c.config.IsSmux))
+	header.Set(HEADER_TOKEN, c.config.Token)
 }

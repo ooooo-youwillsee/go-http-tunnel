@@ -10,16 +10,16 @@ import (
 
 func (c *Client) connectWithHTTP() net.Conn {
 	// dial tunnel
-	tunnelConn, err := net.Dial("tcp", c.tunnelAddr)
+	tunnelConn, err := net.Dial("tcp", c.config.TunnelAddr)
 	if err != nil {
-		log.Errorf("dial tunnelAddr %s, err: %v", c.tunnelAddr, err)
+		log.Errorf("dial TunnelAddr %s, err: %v", c.config.TunnelAddr, err)
 		return nil
 	}
 	// send request
-	request, _ := http.NewRequest(http.MethodConnect, c.tunnelUrl, nil)
-	request.Host = c.tunnelAddr
-	request.Header.Set(HEADER_REMOTE_ADDR, c.remoteAddr)
+	request, _ := http.NewRequest(http.MethodConnect, c.config.TunnelUrl, nil)
+	request.Host = c.config.TunnelAddr
 	request.Header.Set("HOST", request.Host)
+	c.setHeader(&request.Header)
 	err = request.Write(tunnelConn)
 	if err != nil {
 		log.Error("send connect request ", err)

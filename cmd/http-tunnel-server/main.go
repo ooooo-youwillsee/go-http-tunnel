@@ -26,7 +26,7 @@ func main() {
 }
 
 func startServer(sc *tunnel.ServerConfig) {
-	server := tunnel.NewServer(sc.Addr, sc.Url, tunnel.ServerWithToken(sc.Token))
+	server := tunnel.NewServer(sc)
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Error(err)

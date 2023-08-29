@@ -11,13 +11,28 @@ var (
 	localAddr  = ":8111"
 	remoteAddr = ":30001"
 	tunnelAddr = ":8112"
+	tunnelUrl  = "/"
 )
 
 func main() {
-	server := tunnel.NewServer(tunnelAddr, "")
+	sc := &tunnel.ServerConfig{
+		TunnelAddr: tunnelAddr,
+		TunnelUrl:  tunnelUrl,
+		Token:      "",
+	}
+	server := tunnel.NewServer(sc)
 	go server.ListenAndServe()
 
-	client := tunnel.NewClient(localAddr, remoteAddr, tunnelAddr, "", tunnel.ClientWithSMux("true"))
+	cc := &tunnel.ClientConfig{
+		LocalAddr:  localAddr,
+		RemoteAddr: remoteAddr,
+		TunnelAddr: tunnelAddr,
+		TunnelUrl:  tunnelUrl,
+		Token:      "",
+		IsSmux:     true,
+		Mode:       tunnel.CONNECT_WEBSOCKET,
+	}
+	client := tunnel.NewClient(cc)
 	go client.ListenAndServe()
 
 	go testServer(remoteAddr)
@@ -29,7 +44,7 @@ func testServer(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
 	mux.HandleFunc("/hello", hello)
-	log.Infoln("listen addr ", addr)
+	log.Infoln("listen test server addr ", addr)
 	err := http.ListenAndServe(addr, mux)
 	if err != nil {
 		log.Fatalln(err)

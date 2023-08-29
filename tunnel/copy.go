@@ -30,3 +30,26 @@ func copyConn(conn1 net.Conn, conn2 net.Conn) {
 		return
 	}
 }
+
+//func copyConn(conn1 net.Conn, conn2 net.Conn) {
+//	buf := make([]byte, 1024*1024)
+//	var (
+//		n   int
+//		err error
+//		nn  int
+//	)
+//	for {
+//		n, err = conn1.Read(buf)
+//		if err != nil {
+//			return
+//		}
+//		nn = 0
+//		for nn < n {
+//			nnn, err := conn2.Write(buf[nn:n])
+//			if err != nil {
+//				return
+//			}
+//			nn += nnn
+//		}
+//	}
+//}

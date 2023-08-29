@@ -1,10 +1,30 @@
 package tunnel
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
-	"strings"
 )
+
+const (
+	DEFAULT_TUNNEL_URL = "/"
+
+	CONFIG_COMMON      = "common"
+	CONFIG_LOCAL_ADDR  = "local_addr"
+	CONFIG_REMOTE_ADDR = "remote_addr"
+	CONFIG_TUNNEL_ADDR = "tunnel_addr"
+	CONFIG_TUNNEL_URL  = "tunnel_url"
+	CONFIG_TOKEN       = "Token"
+	CONFIG_SMUX        = "IsSmux"
+	CONFIG_MODE        = "Mode"
+)
+
+const (
+	CONNECT_HTTP      ConnectMode = "http"
+	CONNECT_WEBSOCKET ConnectMode = "websocket"
+)
+
+type ConnectMode string
 
 type ClientConfigs []*ClientConfig
 
@@ -14,7 +34,8 @@ type ClientConfig struct {
 	TunnelAddr string
 	TunnelUrl  string
 	Token      string
-	Smux       string
+	IsSmux     bool
+	Mode       ConnectMode
 }
 
 func NewClientConfigsFromFile(configFile string) *ClientConfigs {
@@ -25,32 +46,49 @@ func NewClientConfigsFromFile(configFile string) *ClientConfigs {
 
 	ccs := &ClientConfigs{}
 	// parse common
-	tunnelAddr := viper.GetString("common.tunnel_addr")
-	tunnelUrl := viper.GetString("common.tunnel_url")
+	tunnelAddr := viper.GetString(CONFIG_COMMON + "." + CONFIG_TUNNEL_ADDR)
+	tunnelUrl := viper.GetString(CONFIG_COMMON + "." + CONFIG_TUNNEL_URL)
+	isSmux := viper.GetBool(CONFIG_COMMON + "." + CONFIG_SMUX)
+	mode := viper.GetString(CONFIG_COMMON + "." + CONFIG_MODE)
+	if tunnelUrl == "" {
+		tunnelUrl = DEFAULT_TUNNEL_URL
+	}
+	if mode == "" {
+		mode = string(CONNECT_WEBSOCKET)
+	}
 
 	// parse special
 	for g, m := range viper.AllSettings() {
-		if g == "common" {
+		if g == CONFIG_COMMON {
 			continue
 		}
 		cc := &ClientConfig{}
-		cc.LocalAddr = getString(m, "local_addr", "")
-		cc.RemoteAddr = getString(m, "remote_addr", "")
-		cc.TunnelAddr = getString(m, "tunnel_addr", tunnelAddr)
-		cc.TunnelUrl = getString(m, "tunnel_url", tunnelUrl)
-		cc.Token = getString(m, "token", "")
-		cc.Smux = getString(m, "isSmux", "true")
+		cc.LocalAddr = getValue(m, CONFIG_LOCAL_ADDR, "")
+		cc.RemoteAddr = getValue(m, CONFIG_REMOTE_ADDR, "")
+		cc.TunnelAddr = getValue(m, CONFIG_TUNNEL_ADDR, tunnelAddr)
+		cc.TunnelUrl = getValue(m, CONFIG_TUNNEL_URL, tunnelUrl)
+		cc.Token = getValue(m, CONFIG_TOKEN, "")
+		cc.IsSmux = getValue(m, CONFIG_SMUX, isSmux)
+		cc.Mode = ConnectMode(getValue(m, CONFIG_MODE, mode))
+		if cc.LocalAddr == "" || cc.RemoteAddr == "" || cc.TunnelAddr == "" {
+			panic(fmt.Sprintf("group %s LocalAddr or RemoteAddr or TunnelAddr is empty", g))
+		}
 		*ccs = append(*ccs, cc)
 	}
 	return ccs
 }
 
+func (c *ClientConfig) String() string {
+	bytes, _ := json.Marshal(c)
+	return string(bytes)
+}
+
 type ServerConfigs []*ServerConfig
 
 type ServerConfig struct {
-	Addr  string
-	Url   string
-	Token string
+	TunnelAddr string
+	TunnelUrl  string
+	Token      string
 }
 
 func NewServerConfigsFrom(configFile string) *ServerConfigs {
@@ -62,26 +100,26 @@ func NewServerConfigsFrom(configFile string) *ServerConfigs {
 	scs := &ServerConfigs{}
 	for g, m := range viper.AllSettings() {
 		sc := &ServerConfig{}
-		sc.Addr = getString(m, "tunnel_addr", "")
-		sc.Url = getString(m, "tunnel_url", "")
-		sc.Token = getString(m, "token", "")
-		if sc.Addr == "" {
-			panic(fmt.Sprintf("group %s config 'Addr' is empty", g))
+		sc.TunnelAddr = getValue(m, CONFIG_TUNNEL_ADDR, "")
+		sc.TunnelUrl = getValue(m, CONFIG_TUNNEL_URL, DEFAULT_TUNNEL_URL)
+		sc.Token = getValue(m, CONFIG_TOKEN, "")
+		if sc.TunnelAddr == "" {
+			panic(fmt.Sprintf("group %s TunnelAddr is empty", g))
 		}
 		*scs = append(*scs, sc)
 	}
 	return scs
 }
 
-func splitAddr(addr string) (string, string) {
-	split := strings.Split(addr, ":")
-	return split[0], split[1]
+func (c *ServerConfig) String() string {
+	bytes, _ := json.Marshal(c)
+	return string(bytes)
 }
 
-func getString(m interface{}, key string, defaultValue string) string {
+func getValue[T any](m interface{}, key string, defaultValue T) T {
 	mm := m.(map[string]interface{})
 	if v, ok := mm[key]; ok {
-		return v.(string)
+		return v.(T)
 	}
 	return defaultValue
 }

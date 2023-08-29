@@ -12,13 +12,11 @@ import (
 func (c *Client) connectWithWebSocket() net.Conn {
 	wsurl := url.URL{
 		Scheme: "ws",
-		Host:   c.tunnelAddr,
-		Path:   c.tunnelUrl,
+		Host:   c.config.TunnelAddr,
+		Path:   c.config.TunnelUrl,
 	}
 	header := http.Header{}
-	header.Set(HEADER_REMOTE_ADDR, c.remoteAddr)
-	header.Set(HEADER_TOKEN, c.token)
-	header.Set(HEADER_IS_SMUX, c.isSmux)
+	c.setHeader(&header)
 	wsc, _, err := websocket.DefaultDialer.Dial(wsurl.String(), header)
 	if err != nil {
 		log.Errorf("dial websocket addr %s, err: %v", wsurl.String(), err)
